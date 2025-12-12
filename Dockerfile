@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar todo el código fuente
 COPY handler.py .
-COPY mcp_server.py  .
 COPY tools/ ./tools/
 
 # Verificar que los archivos se copiaron correctamente

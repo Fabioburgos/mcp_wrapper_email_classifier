@@ -46,34 +46,58 @@ def get_tool_definition():
         inputSchema={
             "type": "object",
             "properties": {
+                "subscription_id": {  # ← NUEVO
+                    "type": "string",
+                    "description": (
+                        "OBLIGATORIO. ID de la suscripción de Microsoft Graph.\n"
+                        "FUENTE: Usa el campo 'subscription_id' extraído de la notificación.\n"
+                        "Este ID se usa para obtener las credenciales del cliente desde DynamoDB."
+                    )
+                },
                 "message_id": {
                     "type": "string",
-                    "description": "ID único del mensaje de Microsoft Graph"
+                    "description": (
+                        "OBLIGATORIO. ID único del mensaje de Microsoft Graph.\n"
+                        "FUENTE: Usa el campo 'message_id' del contexto.\n"
+                        "Este ID identifica el email a procesar."
+                    )
                 }
             },
-            "required": ["message_id"]
+            "required": ["subscription_id", "message_id"]  # ← Ambos requeridos
         }
     )
 
-async def invoke_email_classifier(message_id: str) -> dict:
+async def invoke_email_classifier(subscription_id: str, message_id: str) -> dict:
     """
-    Invoca el email_classifier vía HTTP con el message_id.
+    Invoca el email_classifier vía HTTP.
+    
+    Args:
+        subscription_id: ID de suscripción para obtener credenciales
+        message_id: ID del mensaje a procesar
     """
     try:
         logger.info(f"Invocando Email Classifier: {EMAIL_CLASSIFIER_URL}")
         
-        # 🔥 Validar que message_id no sea None
+        # Validaciones
+        if not subscription_id:
+            logger.error("subscription_id es None o vacío")
+            return {
+                'success': False,
+                'error': 'subscription_id es requerido'
+            }
+        
         if not message_id:
             logger.error("message_id es None o vacío")
             return {
                 'success': False,
-                'message_id': None,
-                'error': 'message_id es requerido pero no fue proporcionado'
+                'error': 'message_id es requerido'
             }
         
+        logger.info(f"Subscription ID: {subscription_id[:40]}...")
         logger.info(f"Message ID: {message_id[:20]}...")
 
         payload = {
+            "subscription_id": subscription_id,  # ← NUEVO
             "value": [
                 {
                     "resource": f"users/inbox/messages('{message_id}')",
@@ -101,12 +125,14 @@ async def invoke_email_classifier(message_id: str) -> dict:
                 response_data = response.json()
                 return {
                     'success': True,
+                    'subscription_id': subscription_id,
                     'message_id': message_id,
                     'classifier_response': response_data
                 }
             except json.JSONDecodeError:
                 return {
                     'success': True,
+                    'subscription_id': subscription_id,
                     'message_id': message_id,
                     'classifier_response': {'text': response.text}
                 }
@@ -118,14 +144,16 @@ async def invoke_email_classifier(message_id: str) -> dict:
 
             return {
                 'success': False,
+                'subscription_id': subscription_id,
                 'message_id': message_id,
-                'error': error_data.get('error', f'HTTP {status_code}: {response.text}')
+                'error': error_data.get('error', f'HTTP {status_code}')
             }
 
     except httpx.TimeoutException:
         logger.error(f"Timeout invocando email_classifier después de 60s")
         return {
             'success': False,
+            'subscription_id': subscription_id,
             'message_id': message_id,
             'error': 'Timeout después de 60 segundos'
         }
@@ -133,6 +161,7 @@ async def invoke_email_classifier(message_id: str) -> dict:
         logger.error(f"Error invocando email_classifier: {e}", exc_info=True)
         return {
             'success': False,
+            'subscription_id': subscription_id,
             'message_id': message_id,
             'error': str(e)
         }

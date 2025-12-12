@@ -67,12 +67,41 @@ async def handle_method(method: str, params: dict, msg_id):
             }
         
         try:
+            # ============================================================
+            # MULTI-TENANT: Extraer subscription_id y message_id
+            # ============================================================
+
+            subscription_id = arguments.get('subscription_id')  # ← AGREGAR ESTO
             message_id = arguments.get('message_id')
-            result = await invoke_email_classifier(message_id)
+
+            # Validar parámetros requeridos
+            if not subscription_id:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "error": {
+                        "code": -32602,
+                        "message": "subscription_id es requerido"
+                    }
+                }
+            
+            if not message_id:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "error": {
+                        "code": -32602,
+                        "message": "message_id es requerido"
+                    }
+                }
+
+            # Invocar classifier con ambos parámetros
+            result = await invoke_email_classifier(subscription_id, message_id)
             
             if result["success"]:
                 text_response = (
                     f"EMAIL PROCESADO EXITOSAMENTE\n\n"
+                    f"Subscription ID: {subscription_id[:40]}...\n"
                     f"Message ID: {message_id}\n\n"
                     f"El email ha sido:\n"
                     f"1. Validado\n2. Clasificado\n3. Movido a carpeta\n4. Procesado"
